@@ -1,0 +1,5 @@
+{
+  server   => 'fqdn',
+  username => 'username',
+  password => 'password',
+}

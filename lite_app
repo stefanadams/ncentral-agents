@@ -1,0 +1,135 @@
+#!/usr/bin/env perl
+use Mojolicious::Lite;
+
+use Mojo::UserAgent;
+
+use Mojo::File 'path';
+use Mojo::JSON 'j';
+use Mojo::Loader 'data_section';
+use Mojo::Template;
+
+plugin 'Config';
+helper get_ncentral_ids => sub { state $nc = _get_ncentral_ids(shift) };
+
+get '/' => sub {
+  my $c = shift;
+  $c->render('recent', ncentral => [split /\n/, path('/tmp/recent.txt')->touch->slurp]);
+} => 'home';
+
+post '/downloads' => sub {
+  my $c = shift;
+  return $c->redirect_to('home') unless $c->param('name');
+  path('/tmp/recent.txt')->touch->spurt(join "\n", $c->param('name'), ((grep { $_ ne $c->param('name') } split /\n/, path('/tmp/recent.txt')->touch->slurp)[0..9]));
+  $c->render('downloads', cid => $c->get_ncentral_ids->{$c->param('name')}, name => $c->param('name'));
+} => 'name_downloads';
+  
+get '/downloads' => sub {
+  my $c = shift;
+  return $c->redirect_to('home') unless $c->param('cid');
+  my $ncentral_ids = $c->get_ncentral_ids;
+  my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
+  $c->render('downloads', cid => $c->param('cid'), name => $name);
+} => 'id_downloads';
+
+get '/:cid/:sid' => sub {
+  my $c = shift;
+  my $url = Mojo::URL->new(sprintf 'https://%s/dms/FileDownload', $c->config('server'))->query(customerID => $c->param('cid'), softwareID => $c->param('sid'));
+  my $ncentral_ids = $c->get_ncentral_ids;
+  my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
+  $c->render(inline => "<h1><%= $name %><%= link_to '$url' => '$url' %>");
+} => 'download';
+
+app->start;
+
+sub _get_ncentral_ids {
+  # Build a normal transaction
+  my $ua = Mojo::UserAgent->new;
+  my $tx = $ua->build_tx(POST => sprintf 'https://%s/dms2/services2/ServerEI2', app->config('server'));
+
+  # Prepare body
+  my $t = Mojo::Template->new(vars => 1);
+  my $body = $t->render(app->renderer->get_data_template({template => 'customerlist', format => 'xml', handler => 'ep'}), {config => app->config});
+  $tx->req->headers->content_length(length $body);
+  $tx->req->headers->content_type('application/soap+xml;charset=UTF-8');
+
+  # Start writing directly with a drain callback
+  my $drain;
+  $drain = sub {
+    my $content = shift;
+    my $chunk = substr $body, 0, 1, '';
+    $drain = undef unless length $body;
+    $content->write($chunk, $drain);
+  };
+  $tx->req->content->$drain;
+
+  # Process transaction
+  $tx = $ua->start($tx);
+  my $dom = $tx->result->dom;
+
+  my $list = $dom->find('customerlistresponse return')->map(sub {
+    $_ = $_->find('info')->grep(sub{$_->at('key') && $_->at('value')})->map(sub{
+      {$_->at('key')->text => $_->at('value')->text};
+    })->flatten;
+    %_ = @$_;
+    $_ = {$_{'customer.customername'} => $_{'customer.customerid'}};
+  })->to_array;
+  warn $#$list;
+  return {map { %$_ } @$list};
+}
+
+__DATA__
+
+@@ layout/default.html.ep
+<html>
+<head><title><%= title %></head>
+<body><%= content %></body>
+</html>
+
+@@ recent.html.ep
+% title 'List';
+% layout 'default';
+<h1>Choose a customer location to view N-Central Downloads<h1>
+% my @ids;
+% while ( my ($k, $v) = each %{$c->get_ncentral_ids} ) {
+%   push @ids, [$k => $v];
+% }
+% my @recent;
+% for my $i ( grep { $_ } @$ncentral[0..9] ) {
+%   push @recent, grep { $_->[0] eq $i } @ids;
+% }
+%= form_for id_downloads => begin
+%= select_field cid => [c('Recent Live Links' => [@recent]), c(All => [sort { lc($a->[0]) cmp lc($b->[0]) } @ids])]
+%= submit_button
+% end
+
+@@ downloads.html.ep
+% title $name;
+% layout 'default';
+<h1><%= $name %></h1>
+% if ( $cid ) {
+<p><%= link_to 'Windows Agent' => 'download',             {cid => $cid, sid => 101} %></p>
+<p><%= link_to 'Windows Probe' => 'download',             {cid => $cid, sid => 103} %></p>
+<p><%= link_to 'macOS Agent' => 'download',               {cid => $cid, sid => 110} %></p>
+<p><%= link_to 'Centos/RedHat 6 x64 Agent' => 'download', {cid => $cid, sid => 134} %></p>
+<p><%= link_to 'Centos/RedHat 6 x86 Agent' => 'download', {cid => $cid, sid => 133} %></p>
+<p><%= link_to 'Centos/RedHat 7 x64 Agent' => 'download', {cid => $cid, sid => 136} %></p>
+<p><%= link_to 'Centos/RedHat 7 x86 Agent' => 'download', {cid => $cid, sid => 135} %></p>
+<p><%= link_to 'Ubuntu 14 x64 Agent' => 'download',       {cid => $cid, sid => 142} %></p>
+<p><%= link_to 'Ubuntu 14 x86 Agent' => 'download',       {cid => $cid, sid => 141} %></p>
+<p><%= link_to 'Ubuntu 16 x64 Agent' => 'download',       {cid => $cid, sid => 144} %></p>
+<p><%= link_to 'Ubuntu 16 x86 Agent' => 'download',       {cid => $cid, sid => 143} %></p>
+% } else {
+<p>Cannot find <%= param 'name' %>.</p>
+<p>Is the name spelled <i>exactly</i> the same in both N-Central and Autotask?</p>
+% }
+
+@@ customerlist.xml.ep
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:ei2="http://ei2.nobj.nable.com/">
+   <soap:Header/>
+   <soap:Body>
+      <ei2:customerList>
+         <ei2:username><%= $config->{username} %></ei2:username>
+         <ei2:password><%= $config->{password} %></ei2:password>
+      </ei2:customerList>
+   </soap:Body>
+</soap:Envelope>
