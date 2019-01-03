@@ -36,7 +36,7 @@ get '/:cid/:sid' => sub {
   my $url = Mojo::URL->new(sprintf 'https://%s/dms/FileDownload', $c->config('server'))->query(customerID => $c->param('cid'), softwareID => $c->param('sid'));
   my $ncentral_ids = $c->get_ncentral_ids;
   my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
-  $c->render(inline => "<h1><%= $name %><%= link_to '$url' => '$url' %>");
+  $c->render(inline => "<h1><%= qq($name) %></h1><%= link_to '$url' => '$url' %>");
 } => 'download';
 
 app->start;
