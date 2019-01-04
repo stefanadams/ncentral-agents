@@ -13,6 +13,8 @@ helper get_ncentral_ids => sub { state $nc = _get_ncentral_ids(shift) };
 
 get '/' => sub {
   my $c = shift;
+  my $up = $c->req->url->to_abs->userinfo || '';
+  return $c->render(text => 'Authentication required!', status => 401) unless $up eq $c->config('sharedauth');
   $c->render('recent', ncentral => [split /\n/, path('/tmp/recent.txt')->touch->slurp]);
 } => 'home';
 
@@ -73,7 +75,6 @@ sub _get_ncentral_ids {
     %_ = @$_;
     $_ = {$_{'customer.customername'} => $_{'customer.customerid'}};
   })->to_array;
-  warn $#$list;
   return {map { %$_ } @$list};
 }
 

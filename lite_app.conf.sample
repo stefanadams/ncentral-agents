@@ -2,4 +2,5 @@
   server   => 'fqdn',
   username => 'username',
   password => 'password',
+  sharedauth => 'user:pass',
 }
