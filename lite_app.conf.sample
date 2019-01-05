@@ -3,4 +3,5 @@
   username => 'username',
   password => 'password',
   sharedauth => 'user:pass',
+  recent => '/tmp/recent.txt',
 }

@@ -8,20 +8,35 @@ use Mojo::JSON 'j';
 use Mojo::Loader 'data_section';
 use Mojo::Template;
 
-plugin 'Config';
+plugin 'Config' => {default => {recent => '/tmp/recent.txt'}};
 helper get_ncentral_ids => sub { state $nc = _get_ncentral_ids(shift) };
+
+get '/:cid/:sid' => sub {
+  my $c = shift;
+  my $url = Mojo::URL->new(sprintf 'https://%s/dms/FileDownload', $c->config('server'))->query(customerID => $c->param('cid'), softwareID => $c->param('sid'));
+  my $ncentral_ids = $c->get_ncentral_ids;
+  my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
+  $c->render(inline => "<h1><%= qq($name) %></h1><%= link_to '$url' => '$url' %>");
+} => 'download';
+
+under '/' => sub {
+  my $c = shift;
+  my $up = $c->req->url->to_abs->userinfo || '';
+  return 1 if $up eq $c->config('sharedauth');
+  $c->res->headers->www_authenticate('Basic');
+  $c->render(text => 'Authentication required!', status => 401);
+  return undef;
+};
 
 get '/' => sub {
   my $c = shift;
-  my $up = $c->req->url->to_abs->userinfo || '';
-  return $c->render(text => 'Authentication required!', status => 401) unless $up eq $c->config('sharedauth');
-  $c->render('recent', ncentral => [split /\n/, path('/tmp/recent.txt')->touch->slurp]);
+  $c->render('recent', ncentral => [split /\n/, path($c->config('recent'))->touch->slurp]);
 } => 'home';
 
 post '/downloads' => sub {
   my $c = shift;
   return $c->redirect_to('home') unless $c->param('name');
-  path('/tmp/recent.txt')->touch->spurt(join "\n", $c->param('name'), ((grep { $_ ne $c->param('name') } split /\n/, path('/tmp/recent.txt')->touch->slurp)[0..9]));
+  path($c->config('recent'))->touch->spurt(join "\n", $c->param('name'), ((grep { $_ ne $c->param('name') } split /\n/, path($c->config('recent'))->touch->slurp)[0..9]));
   $c->render('downloads', cid => $c->get_ncentral_ids->{$c->param('name')}, name => $c->param('name'));
 } => 'name_downloads';
   
@@ -33,13 +48,6 @@ get '/downloads' => sub {
   $c->render('downloads', cid => $c->param('cid'), name => $name);
 } => 'id_downloads';
 
-get '/:cid/:sid' => sub {
-  my $c = shift;
-  my $url = Mojo::URL->new(sprintf 'https://%s/dms/FileDownload', $c->config('server'))->query(customerID => $c->param('cid'), softwareID => $c->param('sid'));
-  my $ncentral_ids = $c->get_ncentral_ids;
-  my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
-  $c->render(inline => "<h1><%= qq($name) %></h1><%= link_to '$url' => '$url' %>");
-} => 'download';
 
 app->start;
 
@@ -91,7 +99,8 @@ __DATA__
 % layout 'default';
 <h1>Choose a customer location to view N-Central Downloads<h1>
 % my @ids;
-% while ( my ($k, $v) = each %{$c->get_ncentral_ids} ) {
+% my %ids = %{$c->get_ncentral_ids};
+% while ( my ($k, $v) = each %ids ) {
 %   push @ids, [$k => $v];
 % }
 % my @recent;
