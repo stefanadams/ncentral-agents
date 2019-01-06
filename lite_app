@@ -8,14 +8,18 @@ use Mojo::JSON 'j';
 use Mojo::Loader 'data_section';
 use Mojo::Template;
 
+use Mojo::Recache;
+
 plugin 'Config' => {default => {recent => '/tmp/recent.txt'}};
 helper get_ncentral_ids => sub { state $nc = _get_ncentral_ids(shift) };
+helper cache => sub { Mojo::Recache->new(expires => 3600, app => shift) };
 
 get '/:cid/:sid' => sub {
   my $c = shift;
   my $url = Mojo::URL->new(sprintf 'https://%s/dms/FileDownload', $c->config('server'))->query(customerID => $c->param('cid'), softwareID => $c->param('sid'));
-  my $ncentral_ids = $c->get_ncentral_ids;
+  my $ncentral_ids = $c->cache->get_ncentral_ids;
   my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
+  return $c->reply->not_found unless $name;
   $c->render(inline => "<h1><%= qq($name) %></h1><%= link_to '$url' => '$url' %>");
 } => 'download';
 
@@ -37,13 +41,13 @@ post '/downloads' => sub {
   my $c = shift;
   return $c->redirect_to('home') unless $c->param('name');
   path($c->config('recent'))->touch->spurt(join "\n", $c->param('name'), ((grep { $_ ne $c->param('name') } split /\n/, path($c->config('recent'))->touch->slurp)[0..9]));
-  $c->render('downloads', cid => $c->get_ncentral_ids->{$c->param('name')}, name => $c->param('name'));
+  $c->render('downloads', cid => $c->cache->get_ncentral_ids->{$c->param('name')}, name => $c->param('name'));
 } => 'name_downloads';
   
 get '/downloads' => sub {
   my $c = shift;
   return $c->redirect_to('home') unless $c->param('cid');
-  my $ncentral_ids = $c->get_ncentral_ids;
+  my $ncentral_ids = $c->cache->get_ncentral_ids;
   my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
   $c->render('downloads', cid => $c->param('cid'), name => $name);
 } => 'id_downloads';
@@ -99,7 +103,7 @@ __DATA__
 % layout 'default';
 <h1>Choose a customer location to view N-Central Downloads<h1>
 % my @ids;
-% my %ids = %{$c->get_ncentral_ids};
+% my %ids = %{$c->cache->get_ncentral_ids};
 % while ( my ($k, $v) = each %ids ) {
 %   push @ids, [$k => $v];
 % }
