@@ -12,7 +12,7 @@ use Mojo::Recache;
 
 plugin 'Config' => {default => {recent => '/tmp/recent.txt'}};
 helper get_ncentral_ids => sub { state $nc = _get_ncentral_ids(shift) };
-helper cache => sub { Mojo::Recache->new(expires => 3600, app => shift) };
+helper cache => sub { Mojo::Recache->new(expires => 3600, app => shift, home => app->home) };
 
 get '/:cid/:sid' => sub {
   my $c = shift;
@@ -103,7 +103,7 @@ __DATA__
 % layout 'default';
 <h1>Choose a customer location to view N-Central Downloads<h1>
 % my @ids;
-% my %ids = %{$c->cache->get_ncentral_ids};
+% my %ids = %{$c->cache->get_ncentral_ids||{}};
 % while ( my ($k, $v) = each %ids ) {
 %   push @ids, [$k => $v];
 % }
