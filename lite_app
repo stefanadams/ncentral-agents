@@ -3,7 +3,7 @@ use Mojolicious::Lite;
 
 use Mojo::UserAgent;
 
-use Mojo::File 'path';
+use Mojo::File qw(path tempdir);
 use Mojo::JSON 'j';
 use Mojo::Loader 'data_section';
 use Mojo::Template;
@@ -13,6 +13,18 @@ use Mojo::Recache;
 plugin 'Config' => {default => {recent => '/tmp/recent.txt'}};
 helper get_ncentral_ids => sub { state $nc = _get_ncentral_ids(shift) };
 helper cache => sub { Mojo::Recache->new(expires => 3600, app => shift, home => app->home) };
+
+my $swibm = app->home->child('tmp')->make_path->child('swibm-windows.exe')->touch;
+app->ua->get("https://backup.management/downloads/swibm-windows.exe")->res->save_to($swibm)
+  if !$swibm->stat->size || time - $swibm->stat->mtime > 86_400;
+
+get '/swibm/#filename' => sub {
+  my $c = shift;
+  $c->res->headers->content_disposition(sprintf 'attachment; filename=%s;', $c->param('filename'));
+  $c->res->headers->content_type('application/octet-stream');
+  #$c->app->log->info($swibm) and $c->render(text => $swibm);
+  $c->reply->file($swibm);
+};
 
 get '/:cid/:sid' => sub {
   my $c = shift;
