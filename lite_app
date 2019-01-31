@@ -32,7 +32,7 @@ get '/:cid/:sid' => sub {
   my $ncentral_ids = $c->cache->get_ncentral_ids;
   my ($name) = grep { $ncentral_ids->{$_} eq $c->param('cid') } keys %$ncentral_ids;
   return $c->reply->not_found unless $name;
-  $c->render(inline => "<h1><%= qq($name) %></h1><%= link_to '$url' => '$url' %>");
+  $c->render(name => $name, url => $url);
 } => 'download';
 
 under '/' => sub {
@@ -148,6 +148,34 @@ __DATA__
 <p>Cannot find <%= param 'name' %>.</p>
 <p>Is the name spelled <i>exactly</i> the same in both N-Central and Autotask?</p>
 % }
+
+@@ download.html.ep
+% if ( param('sid') == 101 ) {
+% title 'Windows Agent';
+% } elsif ( param('sid') == 103 ) {
+% title 'Windows Probe';
+% } elsif ( param('sid') == 110 ) {
+% title 'macOS Agent';
+% } elsif ( param('sid') == 134 ) {
+% title 'Centos/RedHat 6 x64 Agent';
+% } elsif ( param('sid') == 133 ) {
+% title 'Centos/RedHat 6 x86 Agent';
+% } elsif ( param('sid') == 136 ) {
+% title 'Centos/RedHat 7 x64 Agent';
+% } elsif ( param('sid') == 135 ) {
+% title 'Centos/RedHat 7 x86 Agent';
+% } elsif ( param('sid') == 142 ) {
+% title 'Ubuntu 14 x64 Agent';
+% } elsif ( param('sid') == 141 ) {
+% title 'Ubuntu 14 x86 Agent';
+% } elsif ( param('sid') == 144 ) {
+% title 'Ubuntu 16 x64 Agent';
+% } elsif ( param('sid') == 143 ) {
+% title 'Ubuntu 16 x86 Agent';
+% }
+<h1><%= qq($name) %></h1>
+<p><%= link_to $url => $url %></p>
+<p><%= link_to '.NET Framework 4.5.2' => "http://download.microsoft.com/download/E/2/1/E21644B5-2DF2-47C2-91BD-63C560427900/NDP452-KB2901907-x86-x64-AllOS-ENU.exe" %></p>
 
 @@ customerlist.xml.ep
 <soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:ei2="http://ei2.nobj.nable.com/">
