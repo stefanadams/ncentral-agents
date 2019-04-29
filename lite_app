@@ -70,6 +70,7 @@ app->start;
 sub _get_ncentral_ids {
   # Build a normal transaction
   my $ua = Mojo::UserAgent->new;
+  $ua->insecure(1);
   my $tx = $ua->build_tx(POST => sprintf 'https://%s/dms2/services2/ServerEI2', app->config('server'));
 
   # Prepare body
